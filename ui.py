@@ -9,6 +9,11 @@ from app import (
 
 
 def run_research_from_ui():
+    """Validate the question, run research, and display the report in the window.
+
+    The research button is disabled while work is in progress and restored
+    afterward. Failures are shown to the user in an error dialog.
+    """
     question = question_input.get("1.0", tk.END).strip()
 
     if not question:
@@ -80,6 +85,10 @@ def run_research_from_ui():
         research_button.config(state=tk.NORMAL)
 
 def show_saved_reports():
+    """Open a window for browsing saved reports and reading their contents.
+
+    Displays an informational dialog when no saved reports are available.
+    """
     reports = list_saved_reports()
 
     if not reports:
@@ -135,6 +144,11 @@ def show_saved_reports():
         )
 
     def open_selected_report(event=None):
+        """Load the selected report into the viewer in the reports window.
+
+        Args:
+            event: Optional Tkinter list-selection event.
+        """
         selection = report_list.curselection()
 
         if not selection:

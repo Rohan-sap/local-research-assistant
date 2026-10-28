@@ -36,13 +36,28 @@ TERM_ALIASES = {
 }
 
 def read_document(file_path):
-    """Read a text document and return its contents."""
+    """Read a UTF-8 text document from disk and return the complete contents.
+
+    Args:
+        file_path: Path to the document to read.
+
+    Returns:
+        The document text as a string.
+    """
 
     with open(file_path, "r", encoding="utf-8") as file:
         return file.read()
 
 def ask_ollama(prompt):
-    """Send a prompt to Ollama and return the model's response."""
+    """Request a non-streaming text response from the configured Ollama model.
+
+    Args:
+        prompt: Instructions and evidence to send to the language model.
+
+    Returns:
+        The generated response, or a readable error message if the request
+        fails or Ollama returns an unexpected response.
+    """
 
     payload = {
         "model": MODEL_NAME,
@@ -74,7 +89,21 @@ def ask_ollama(prompt):
 
 
 def get_embedding(text, input_type="document"):
-    """Convert query or document text into an embedding vector."""
+    """Create an Ollama embedding for a search query or document passage.
+
+    Nomic task prefixes distinguish query embeddings from document embeddings.
+
+    Args:
+        text: Query or passage to convert into a vector.
+        input_type: Either ``"query"`` or ``"document"``.
+
+    Returns:
+        The embedding vector returned by Ollama.
+
+    Raises:
+        ValueError: If ``input_type`` is not supported.
+        RuntimeError: If the embedding service request or response fails.
+    """
 
     # Nomic uses task prefixes to distinguish search queries from searchable text.
     if input_type == "query":
@@ -120,7 +149,15 @@ def get_embedding(text, input_type="document"):
         ) from error
 
 def build_research_prompt(question, evidence):
-    """Build a strictly evidence-grounded research prompt."""
+    """Build the model prompt that restricts answers to supplied evidence.
+
+    Args:
+        question: The user's research question.
+        evidence: Retrieved passages with their source labels.
+
+    Returns:
+        A prompt requesting only an answer and its limitations.
+    """
 
     return f"""
         You are a research assistant.
@@ -153,7 +190,14 @@ def build_research_prompt(question, evidence):
         """
 
 def split_into_chunks(document):
-    """Split a document into non-empty paragraphs."""
+    """Split text on blank lines and discard empty or whitespace-only paragraphs.
+
+    Args:
+        document: Full text of a source document.
+
+    Returns:
+        A list of trimmed, non-empty paragraphs in their original order.
+    """
 
     paragraphs = document.split("\n\n")
 
@@ -164,7 +208,14 @@ def split_into_chunks(document):
     ]
 
 def create_sourced_chunks(documents):
-    """Split documents into chunks while retaining source filenames."""
+    """Split each document into paragraphs and attach its source filename.
+
+    Args:
+        documents: Document records containing ``source`` and ``content``.
+
+    Returns:
+        Paragraph records with ``source`` and ``content`` fields.
+    """
 
     sourced_chunks = []
 
@@ -180,7 +231,14 @@ def create_sourced_chunks(documents):
     return sourced_chunks
 
 def extract_keywords(text):
-    """Convert text into normalized, meaningful lowercase keywords."""
+    """Extract lowercase keywords, remove stop words, and normalize aliases.
+
+    Args:
+        text: Text to tokenize for lexical matching.
+
+    Returns:
+        A set of normalized keywords; duplicate words are removed.
+    """
 
     words = re.findall(r"\b[a-zA-Z0-9]+\b", text.lower())
 
@@ -192,7 +250,18 @@ def extract_keywords(text):
 
 
 def retrieve_relevant_chunks(question, chunks, top_k=3):
-    """Return the highest-ranked sourced chunks."""
+    """Rank chunks by shared normalized keywords and return the top matches.
+
+    Chunks with no keyword overlap are omitted. Ties retain their input order.
+
+    Args:
+        question: Research question to compare against the chunks.
+        chunks: Source-aware evidence records containing ``content``.
+        top_k: Maximum number of matching chunks to return.
+
+    Returns:
+        The highest-scoring matching chunks, in descending score order.
+    """
 
     question_words = extract_keywords(question)
     scored_chunks = []
@@ -215,7 +284,14 @@ def retrieve_relevant_chunks(question, chunks, top_k=3):
     ]
 
 def load_text_documents(folder_path):
-    """Load every .txt document from a folder."""
+    """Load ``.txt`` files from a folder in filename order.
+
+    Args:
+        folder_path: Directory containing source documents.
+
+    Returns:
+        Document records with each filename and its UTF-8 text.
+    """
 
     folder = Path(folder_path)
     documents = []
@@ -232,7 +308,14 @@ def load_text_documents(folder_path):
 
 
 def get_source_names(relevant_chunks):
-    """Return unique source filenames from retrieved chunks."""
+    """Collect unique source filenames from evidence chunks in sorted order.
+
+    Args:
+        relevant_chunks: Retrieved evidence records with a ``source`` field.
+
+    Returns:
+        A sorted list of distinct source filenames.
+    """
 
     return sorted({
         chunk["source"]
@@ -241,7 +324,20 @@ def get_source_names(relevant_chunks):
 
 
 def cosine_similarity(vector_a, vector_b):
-    """Calculate cosine similarity between two embedding vectors."""
+    """Calculate cosine similarity for two vectors of equal length.
+
+    Returns ``0.0`` when either vector has zero magnitude.
+
+    Args:
+        vector_a: First embedding vector.
+        vector_b: Second embedding vector.
+
+    Returns:
+        A cosine similarity score.
+
+    Raises:
+        ValueError: If the vectors have different dimensions.
+    """
 
     if len(vector_a) != len(vector_b):
         raise ValueError("Embedding vectors must have the same dimensions.")
@@ -273,7 +369,21 @@ def retrieve_semantic_chunks(
     semantic_weight=0.60,
     keyword_weight=0.40
 ):
-    """Rank chunks using semantic similarity and keyword overlap."""
+    """Rank evidence using embeddings, then refine scores with keyword overlap.
+
+    Chunks below ``min_similarity`` are discarded before hybrid scoring.
+
+    Args:
+        question: Query whose embedding and keywords are compared to chunks.
+        chunks: Evidence records with source and content metadata.
+        top_k: Maximum number of ranked chunks to return.
+        min_similarity: Minimum cosine similarity required to keep a chunk.
+        semantic_weight: Contribution of cosine similarity to the final score.
+        keyword_weight: Contribution of keyword overlap to the final score.
+
+    Returns:
+        Ranked evidence records with similarity and hybrid score fields.
+    """
 
     question_embedding = get_embedding(
         question,
@@ -337,7 +447,21 @@ def create_contextual_sourced_chunks(
     documents,
     window_size=2
 ):
-    """Create overlapping chunks while retaining source metadata."""
+    """Create paragraph-window chunks that retain local-document metadata.
+
+    Each chunk starts at one paragraph and includes up to ``window_size``
+    consecutive paragraphs, so adjacent chunks overlap.
+
+    Args:
+        documents: Records containing local source filenames and full text.
+        window_size: Number of consecutive paragraphs in each chunk.
+
+    Returns:
+        Source-aware chunk records marked as local evidence.
+
+    Raises:
+        ValueError: If ``window_size`` is less than one.
+    """
 
     if window_size < 1:
         raise ValueError("window_size must be at least 1.")
@@ -365,7 +489,17 @@ def create_contextual_sourced_chunks(
 
 
 def load_config(file_path="config.json"):
-    """Load application configuration from a local JSON file."""
+    """Load and validate the top-level JSON object from the config file.
+
+    Args:
+        file_path: Configuration file path; defaults to ``config.json``.
+
+    Returns:
+        Configuration settings as a dictionary.
+
+    Raises:
+        RuntimeError: If the file is missing, invalid JSON, or not an object.
+    """
 
     path = Path(file_path)
 
@@ -391,7 +525,19 @@ def load_config(file_path="config.json"):
     return config
 
 def search_web(query, api_key, max_results=3):
-    """Search the web with Tavily and return structured results."""
+    """Submit a query to Tavily and return its search-result records.
+
+    Args:
+        query: Research question or search phrase.
+        api_key: Tavily API key.
+        max_results: Maximum number of results requested.
+
+    Returns:
+        The Tavily ``results`` list.
+
+    Raises:
+        RuntimeError: If the key is missing or the request/response fails.
+    """
 
     if not api_key:
         raise RuntimeError(
@@ -437,7 +583,14 @@ def search_web(query, api_key, max_results=3):
 
 
 def create_web_chunks(web_results):
-    """Convert Tavily results into source-aware evidence chunks."""
+    """Convert non-empty Tavily results into source-aware evidence chunks.
+
+    Args:
+        web_results: Tavily result records containing title, URL, and content.
+
+    Returns:
+        Web evidence records; results without content are skipped.
+    """
 
     chunks = []
 
@@ -459,7 +612,14 @@ def create_web_chunks(web_results):
     return chunks
 
 def get_source_references(relevant_chunks):
-    """Return unique source references from retrieved evidence."""
+    """Build an ordered, de-duplicated list of local and web citations.
+
+    Args:
+        relevant_chunks: Retrieved records with source type and source details.
+
+    Returns:
+        Citation records with ``type``, ``name``, and ``url`` fields.
+    """
 
     references = []
     seen = set()
@@ -491,7 +651,17 @@ def get_source_references(relevant_chunks):
     return references
 
 def clean_research_response(response):
-    """Extract one ANSWER and one LIMITATIONS section."""
+    """Normalize model output to a single ANSWER and LIMITATIONS report.
+
+    If either expected heading is absent, use the available text or a
+    descriptive fallback; discard unexpected trailing sections.
+
+    Args:
+        response: Raw text generated by the language model.
+
+    Returns:
+        Cleaned report containing exactly the two expected sections.
+    """
 
     text = response.strip()
 
@@ -543,7 +713,17 @@ def clean_research_response(response):
     )
 
 def save_report(question, report, sources, folder_path="reports"):
-    """Save a completed research report as a text file."""
+    """Write a timestamped report and its source citations to disk.
+
+    Args:
+        question: Research question answered by the report.
+        report: Formatted answer and limitations.
+        sources: Citation records to include in the report.
+        folder_path: Destination directory, created if it does not exist.
+
+    Returns:
+        The path of the newly written report file.
+    """
 
     folder = Path(folder_path)
     folder.mkdir(exist_ok=True)
@@ -583,7 +763,14 @@ def save_report(question, report, sources, folder_path="reports"):
     return file_path
 
 def list_saved_reports(folder_path="reports"):
-    """Return saved research reports from newest to oldest."""
+    """Find timestamped report files and order them by modification time.
+
+    Args:
+        folder_path: Directory to search for saved reports.
+
+    Returns:
+        Report paths from newest to oldest, or an empty list if absent.
+    """
 
     folder = Path(folder_path)
 
@@ -599,7 +786,17 @@ def list_saved_reports(folder_path="reports"):
     return reports
 
 def read_saved_report(report_path):
-    """Read and return a previously saved research report."""
+    """Read a saved report as UTF-8 text.
+
+    Args:
+        report_path: Path to the report file.
+
+    Returns:
+        The report contents.
+
+    Raises:
+        FileNotFoundError: If the requested report does not exist.
+    """
 
     path = Path(report_path)
 
@@ -618,7 +815,27 @@ def run_research(
     documents_folder="documents",
     reports_folder="reports"
 ):
-    """Run the complete research workflow and return structured results."""
+    """Run local and web retrieval, generate a report, and save the result.
+
+    The workflow validates inputs and configuration, creates evidence chunks,
+    ranks evidence with Ollama embeddings, generates an answer when evidence
+    is available, and saves the final report.
+
+    Args:
+        question: User's research question.
+        config_path: Path to the JSON configuration file.
+        documents_folder: Directory containing local ``.txt`` sources.
+        reports_folder: Destination for generated report files.
+
+    Returns:
+        A dictionary containing the normalized question, report, citations,
+        retrieved chunks, and saved report path.
+
+    Raises:
+        ValueError: If the question is empty.
+        RuntimeError: If configuration, source documents, or services are
+            unavailable or invalid.
+    """
 
     question = question.strip()
 

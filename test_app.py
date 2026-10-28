@@ -29,13 +29,16 @@ from app import (
 # with `python -m unittest discover`.
 
 class TestLocalResearchAssistant(unittest.TestCase):
+    """Verify research helpers, service error handling, and report storage."""
 
     def test_ask_ollama_is_available(self):
+        """Confirm the Ollama generation helper is importable and callable."""
         self.assertTrue(callable(ask_ollama))
 
     # Stub the network call so these tests stay local and deterministic.
     @patch("app.urlopen")
     def test_ask_ollama_returns_response(self, mock_urlopen):
+        """Return the response text when Ollama sends a valid payload."""
         fake_response = MagicMock()
         fake_response.read.return_value = (
             b'{"response": "This is a test response."}'
@@ -49,6 +52,7 @@ class TestLocalResearchAssistant(unittest.TestCase):
 
     @patch("app.urlopen")
     def test_ask_ollama_handles_connection_error(self, mock_urlopen):
+        """Convert an Ollama connection failure into a readable message."""
         mock_urlopen.side_effect = URLError("Connection refused")
 
         result = ask_ollama("Test question")
@@ -60,6 +64,7 @@ class TestLocalResearchAssistant(unittest.TestCase):
 
     @patch("app.urlopen")
     def test_ask_ollama_handles_missing_response_field(self, mock_urlopen):
+        """Report an unexpected response when Ollama omits its text field."""
         fake_response = MagicMock()
         fake_response.read.return_value = b'{"unexpected": "value"}'
 
@@ -74,6 +79,7 @@ class TestLocalResearchAssistant(unittest.TestCase):
 
     @patch("app.urlopen")
     def test_ask_ollama_handles_invalid_json(self, mock_urlopen):
+        """Report an unexpected response when Ollama returns invalid JSON."""
         fake_response = MagicMock()
         fake_response.read.return_value = b"This is not valid JSON"
 
@@ -88,6 +94,7 @@ class TestLocalResearchAssistant(unittest.TestCase):
 
     @patch("app.urlopen")
     def test_ask_ollama_handles_http_error(self, mock_urlopen):
+        """Include the HTTP status code when the Ollama API rejects a call."""
         mock_urlopen.side_effect = HTTPError(
             url="http://localhost:11434/api/generate",
             code=500,
@@ -104,6 +111,7 @@ class TestLocalResearchAssistant(unittest.TestCase):
         )
 
     def test_build_research_prompt_contains_question_and_evidence(self):
+        """Include both the user's question and retrieved evidence in the prompt."""
         question = "What are the benefits of local AI?"
         evidence = "Local AI can keep sensitive data on local infrastructure."
 
@@ -113,6 +121,7 @@ class TestLocalResearchAssistant(unittest.TestCase):
         self.assertIn(evidence, prompt)
 
     def test_extract_keywords_removes_stop_words(self):
+        """Remove common stop words while keeping useful question terms."""
         keywords = extract_keywords(
             "What are the advantages of local AI?"
         )
@@ -124,6 +133,7 @@ class TestLocalResearchAssistant(unittest.TestCase):
 
 
     def test_retrieve_relevant_chunks_ranks_best_match_first(self):
+        """Place the chunk with the greatest keyword overlap at the top."""
         chunks = [
             {
                 "source": "cloud.txt",
@@ -155,6 +165,7 @@ class TestLocalResearchAssistant(unittest.TestCase):
         )
 
     def test_extract_keywords_normalizes_aliases(self):
+        """Normalize configured synonyms before returning extracted keywords."""
         keywords = extract_keywords(
             "What are the benefits of running AI privately?"
         )
@@ -165,6 +176,7 @@ class TestLocalResearchAssistant(unittest.TestCase):
         self.assertNotIn("privately", keywords)
 
     def test_retrieve_relevant_chunks_respects_top_k(self):
+        """Limit keyword retrieval results to the requested number of chunks."""
         chunks = [
             {
                 "source": "one.txt",
@@ -195,6 +207,7 @@ class TestLocalResearchAssistant(unittest.TestCase):
 
 
     def test_load_text_documents_loads_only_txt_files(self):
+        """Load text files in filename order while ignoring other extensions."""
         with tempfile.TemporaryDirectory() as temporary_folder:
             folder = Path(temporary_folder)
 
@@ -224,6 +237,7 @@ class TestLocalResearchAssistant(unittest.TestCase):
             self.assertEqual(documents[1]["source"], "second.txt")
 
     def test_create_sourced_chunks_retains_source(self):
+        """Keep each original filename attached to its paragraph chunks."""
         documents = [
             {
                 "source": "local_ai.txt",
@@ -253,6 +267,7 @@ class TestLocalResearchAssistant(unittest.TestCase):
 
 
     def test_retrieval_selects_correct_source_across_documents(self):
+        """Return the source whose paragraph best matches the research query."""
         documents = [
             {
                 "source": "local_ai.txt",
@@ -286,6 +301,7 @@ class TestLocalResearchAssistant(unittest.TestCase):
         )
 
     def test_get_source_names_returns_unique_sources(self):
+        """Return each cited filename once in sorted order."""
         chunks = [
             {
                 "source": "ai_notes.txt",
@@ -313,6 +329,7 @@ class TestLocalResearchAssistant(unittest.TestCase):
         self,
         mock_get_embedding
     ):
+        """Rank the locally relevant chunk above a semantically weak result."""
         chunks = [
             {
                 "source": "cloud.txt",
@@ -328,6 +345,7 @@ class TestLocalResearchAssistant(unittest.TestCase):
         ]
 
         def fake_embedding(text, input_type="document"):
+            """Provide deterministic vectors for the semantic-ranking test."""
             if input_type == "query":
                 return [1.0, 0.0]
 
@@ -355,6 +373,7 @@ class TestLocalResearchAssistant(unittest.TestCase):
         self,
         mock_get_embedding
     ):
+        """Exclude chunks whose cosine similarity is below the threshold."""
         chunks = [
             {
                 "source": "unrelated.txt",
@@ -363,6 +382,7 @@ class TestLocalResearchAssistant(unittest.TestCase):
         ]
 
         def fake_embedding(text, input_type="document"):
+            """Return orthogonal vectors so the evidence fails the threshold."""
             if input_type == "query":
                 return [1.0, 0.0]
 
@@ -379,6 +399,7 @@ class TestLocalResearchAssistant(unittest.TestCase):
         self.assertEqual(results, [])
 
     def test_contextual_chunks_include_adjacent_paragraphs(self):
+        """Include adjacent paragraphs in each overlapping contextual chunk."""
         documents = [
             {
                 "source": "local_ai.txt",
@@ -418,6 +439,7 @@ class TestLocalResearchAssistant(unittest.TestCase):
         )
 
     def test_create_web_chunks_retains_url_and_source(self):
+        """Preserve page title and URL when converting web results to chunks."""
         web_results = [
             {
                 "title": "Example Research Page",
@@ -447,6 +469,7 @@ class TestLocalResearchAssistant(unittest.TestCase):
         )
 
     def test_get_source_references_preserves_web_urls(self):
+        """Keep web URLs and local citation types in the source references."""
         chunks = [
             {
                 "source": "Local notes",
@@ -482,6 +505,7 @@ class TestLocalResearchAssistant(unittest.TestCase):
         )
 
     def test_clean_research_response_removes_prompt_leakage(self):
+        """Remove model-generated rationale and leaked prompt instructions."""
         response = """
             ANSWER:
             Local AI can keep data within local infrastructure.
@@ -524,6 +548,7 @@ class TestLocalResearchAssistant(unittest.TestCase):
         )
         
     def test_save_report_creates_report_file(self):
+        """Save the question, report, and both local and web citations."""
         sources = [
             {
                 "type": "local",
@@ -577,6 +602,7 @@ class TestLocalResearchAssistant(unittest.TestCase):
             )
 
     def test_list_saved_reports_finds_report_files(self):
+        """Find timestamped reports and ignore unrelated text files."""
         with tempfile.TemporaryDirectory() as temporary_folder:
             folder = Path(temporary_folder)
 
@@ -623,6 +649,7 @@ class TestLocalResearchAssistant(unittest.TestCase):
             )
 
     def test_read_saved_report_returns_saved_content(self):
+        """Read a saved report and return its text without altering it."""
         with tempfile.TemporaryDirectory() as temporary_folder:
             report_path = (
                 Path(temporary_folder) / "research_report_test.txt"
@@ -652,6 +679,7 @@ class TestLocalResearchAssistant(unittest.TestCase):
             )
 
     def test_load_config_rejects_missing_file(self):
+        """Raise a configuration error when the requested file is absent."""
         with tempfile.TemporaryDirectory() as temporary_folder:
             missing_path = (
                 Path(temporary_folder) / "missing_config.json"
@@ -661,6 +689,7 @@ class TestLocalResearchAssistant(unittest.TestCase):
                 load_config(missing_path)
 
     def test_load_config_rejects_invalid_json(self):
+        """Raise a configuration error when the file is not valid JSON."""
         with tempfile.TemporaryDirectory() as temporary_folder:
             config_path = (
                 Path(temporary_folder) / "config.json"
@@ -675,9 +704,11 @@ class TestLocalResearchAssistant(unittest.TestCase):
                 load_config(config_path)
 
     def test_run_research_is_available(self):
+        """Confirm that the complete research workflow is callable."""
         self.assertTrue(callable(run_research))
 
     def test_clean_research_response_removes_extra_sections(self):
+        """Keep the required report sections and remove extra model sections."""
         response = """
     ANSWER:
     Joule Agents automate business workflows.
