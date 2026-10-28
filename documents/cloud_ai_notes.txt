@@ -1,0 +1,7 @@
+Cloud AI services run models on infrastructure managed by an external provider.
+
+A business can access powerful models without purchasing dedicated AI hardware.
+
+Cloud services can scale computing resources based on demand.
+
+Potential considerations include recurring usage costs, internet connectivity, provider dependency, and how organizational data is handled by the external service.

@@ -1,0 +1,11 @@
+Local AI models run on hardware controlled by the user or organization.
+
+One advantage of local AI is that prompts and documents can remain within the local environment instead of being sent to an external AI service.
+
+Local AI can require significant computing resources depending on the size of the model.
+
+Cloud AI services can provide access to powerful models without requiring users to own the underlying AI hardware.
+
+Cloud services may introduce ongoing usage costs and require data to be transmitted to an external provider.
+
+The appropriate choice between local and cloud AI depends on requirements such as privacy, model capability, hardware availability, cost, and operational complexity.

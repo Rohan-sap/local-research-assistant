@@ -11,3 +11,5 @@ venv/
 
 # Generated research reports
 reports/
+
+config.json
