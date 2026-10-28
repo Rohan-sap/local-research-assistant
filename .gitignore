@@ -1,0 +1,13 @@
+# Python generated files
+__pycache__/
+*.pyc
+
+# Virtual environments
+.venv/
+venv/
+
+# Environment variables / secrets
+.env
+
+# Generated research reports
+reports/
